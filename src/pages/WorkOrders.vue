@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/vue-query';
-import { listWorkOrders, createWorkOrder, type WorkOrder } from '@/services/workOrders';
+import { useQuery, useQueryClient } from '@tanstack/vue-query';
+import { listWorkOrders, type WorkOrder } from '@/services/workOrders';
+import { useOfflineMutation } from '@/composables/useOfflineMutation';
+import { useOnline } from '@/composables/useOnline';
 
 type PageResp = { data: WorkOrder[]; total: number };
 
-const page = ref(1); const q = ref('');
+const page = ref(1);
+const q = ref('');
 const qc = useQueryClient();
+
+const { online } = useOnline();
 
 const { data: woData, isLoading, error } = useQuery<PageResp>({
   queryKey: ['wo','list', page, q] as const,
@@ -14,13 +19,16 @@ const { data: woData, isLoading, error } = useQuery<PageResp>({
 });
 const rows = computed(() => woData.value?.data ?? []);
 
-const m = useMutation({
-  mutationFn: (b: Partial<WorkOrder>) => createWorkOrder(b as any),
-  onSuccess: () => qc.invalidateQueries({ queryKey: ['wo','list'] }),
-});
-
 const form = ref<Partial<WorkOrder>>({ title: '', code: '', status: 'open', customerId: 1 });
-function submit() { m.mutate(form.value); }
+
+const m = useOfflineMutation<WorkOrder>(
+  '/work-orders',
+  'POST',
+  ['wo','list'],
+  { onSuccess: () => qc.invalidateQueries({ queryKey: ['wo','list'] }) }
+);
+
+function submit(){ m.mutate(form.value); }
 </script>
 
 <template>
@@ -44,16 +52,23 @@ function submit() { m.mutate(form.value); }
         </select>
         <input v-model.number="form.customerId" type="number" placeholder="MüşteriID" />
         <button type="submit" :disabled="m.isPending ? true : false">Kaydet</button>
+        <span v-if="!online" class="text-xs opacity-70">offline: kuyruğa eklenecek</span>
       </form>
     </div>
 
     <div v-if="isLoading">Yükleniyor…</div>
     <div v-else-if="error">Hata</div>
     <table v-else class="min-w-full border">
-      <thead><tr><th>Kod</th><th>Başlık</th><th>Durum</th><th>Müşteri</th><th>Oluşturma</th></tr></thead>
+      <thead>
+      <tr><th>Kod</th><th>Başlık</th><th>Durum</th><th>Müşteri</th><th>Oluşturma</th></tr>
+      </thead>
       <tbody>
       <tr v-for="w in rows" :key="w.id">
-        <td>{{ w.code }}</td><td>{{ w.title }}</td><td>{{ w.status }}</td><td>{{ w.customerId }}</td><td>{{ w.createdAt }}</td>
+        <td><router-link :to="`/work-orders/${w.id}`">{{ w.code }}</router-link></td>
+        <td><router-link :to="`/work-orders/${w.id}`">{{ w.title }}</router-link></td>
+        <td>{{ w.status }}</td>
+        <td>{{ w.customerId }}</td>
+        <td>{{ w.createdAt }}</td>
       </tr>
       </tbody>
     </table>
