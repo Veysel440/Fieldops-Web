@@ -1,10 +1,17 @@
+import type { z } from 'zod';
 import { http } from './http';
-export type Asset = { id:number; code:string; name:string; customerId:number; lat?:number; lng?:number; createdAt:string };
+import { Asset as AssetSchema, PageOf } from '@/schemas';
 
-export async function listAssets(params: { page?: number; q?: string } = {}) {
+export type Asset = z.infer<typeof AssetSchema>;
+
+const Page = PageOf(AssetSchema);
+
+export async function listAssets(params: { page?: number; q?: string; size?: number } = {}) {
   const { data } = await http.get('/assets', { params });
-  return data as { data: Asset[]; total: number };
+  return Page.parse(data);
 }
-export async function createAsset(b: Omit<Asset,'id'|'createdAt'>) {
-  const { data } = await http.post('/assets', b); return data as Asset;
+
+export async function createAsset(b: Omit<Asset, 'id' | 'createdAt'>) {
+  const { data } = await http.post('/assets', b);
+  return AssetSchema.parse(data);
 }

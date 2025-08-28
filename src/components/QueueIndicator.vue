@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { storeToRefs } from 'pinia';
+import { computed } from 'vue';
 import { useOfflineQueue } from '@/stores/offlineQueue';
+import { useOnline } from '@/composables/useOnline';
+
 const q = useOfflineQueue();
-const { size, processing } = storeToRefs(q);
+const { online } = useOnline();
+const size = computed(() => q.size);
+function syncNow(){ q.processAll(); }
 </script>
 
 <template>
-  <div class="px-2 py-1 text-sm border rounded" :title="processing ? 'İşleniyor' : 'Bekliyor'">
-    Kuyruk: {{ size }}
-    <button class="ml-2 underline" @click="q.processAll()">Gönder</button>
-  </div>
+  <button class="px-2 py-1 rounded border flex items-center gap-2"
+          :title="online ? 'Kuyruğu senkronize et' : 'Offline'"
+          @click="syncNow" :disabled="!online">
+    <span>Queue</span>
+    <span class="text-xs px-1 rounded bg-gray-200">{{ size }}</span>
+  </button>
 </template>
