@@ -1,27 +1,31 @@
 import { defineStore } from 'pinia';
-import { loginApi, meApi, refreshApi, logoutApi, type Tokens, type User } from '@/services/auth';
+import { http } from '@/services/http';
 
 export const useAuthStore = defineStore('auth', {
-  state: () => ({ user: null as User|null, tokens: null as Tokens|null, initialized: false }),
-  getters: { isAuthed: (s) => !!s.tokens?.accessToken, role: (s) => s.user?.role },
+  state: () => ({ accessToken: '' as string, user: null as any, isAuthed: false as boolean, role: null as string | null }),
   actions: {
-    async bootstrap() {
-      const raw = localStorage.getItem('auth'); if (raw) this.tokens = JSON.parse(raw);
-      if (this.tokens) try { this.user = await meApi(); } catch { await this.tryRefresh(); }
-      this.initialized = true;
+    setAccessToken(t: string) {
+      this.accessToken = t; this.isAuthed = !!t;
     },
     async login(email: string, password: string) {
-      this.tokens = await loginApi({ email, password });
-      localStorage.setItem('auth', JSON.stringify(this.tokens));
-      this.user = await meApi();
+      // CSRF al
+      await http.get('/auth/csrf');
+      const r = await http.post('/auth/login', { email, password });
+      this.setAccessToken((r.data as any).accessToken);
+      this.user = (r.data as any).user ?? null;
+      this.role = this.user?.role ?? null;
     },
-    async tryRefresh() {
-      if (!this.tokens?.refreshToken) return;
-      this.tokens = await refreshApi(this.tokens.refreshToken);
-      localStorage.setItem('auth', JSON.stringify(this.tokens));
-      this.user = await meApi();
-    },
-    async logout() { try { await logoutApi(); } finally {
-      this.tokens = null; this.user = null; localStorage.removeItem('auth'); } }
+    async logout(silent = false) {
+      try { await http.post('/auth/logout'); } catch {}
+      this.setAccessToken(''); this.user = null; this.role = null;
+      if (!silent) location.assign('/login');
+      localStorage.setItem('fieldops:logout', String(Date.now())); // cross-tab
+    }
+  }
+});
+
+window.addEventListener('storage', (e) => {
+  if (e.key === 'fieldops:logout') {
+    const a = useAuthStore(); a.setAccessToken(''); a.user = null; a.role = null;
   }
 });

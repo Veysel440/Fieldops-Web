@@ -1,4 +1,3 @@
-/// <reference lib="webworker" />
 import { clientsClaim } from 'workbox-core';
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { registerRoute, NavigationRoute } from 'workbox-routing';
@@ -6,51 +5,49 @@ import { StaleWhileRevalidate, CacheFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 
-declare const self: ServiceWorkerGlobalScope;
-type Ctx = { url: URL; request: Request; event: ExtendableEvent };
+declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: any[] };
 
-// App-shell
+// app-shell
 self.skipWaiting();
 clientsClaim();
 cleanupOutdatedCaches();
+
+// offline sayfayı da precache’e ekle
+self.__WB_MANIFEST = (self.__WB_MANIFEST || []);
+self.__WB_MANIFEST.push({ url: '/offline.html', revision: null });
 precacheAndRoute(self.__WB_MANIFEST as any);
 
-// SPA navigation fallback
-registerRoute(new NavigationRoute(async () => fetch('/index.html')));
+// SPA navigation fallback: online index, olmazsa offline
+registerRoute(new NavigationRoute(async () => {
+  try {
+    return await fetch('/index.html', { cache: 'no-store' });
+  } catch {
+    const c = await caches.open('workbox-precache-v2');
+    const res = await c.match('/offline.html');
+    return res ?? new Response('Offline', { status: 503 });
+  }
+}));
 
-// API GET cache (aynı origin /api/**)
+// API GET cache
 registerRoute(
-  ({ url, request }: Ctx) =>
-    url.origin === self.location.origin &&
-    url.pathname.startsWith('/api') &&
-    request.method === 'GET',
+  ({ url, request }) => url.origin === self.location.origin && url.pathname.startsWith('/api') && request.method === 'GET',
   new StaleWhileRevalidate({
     cacheName: 'api-get',
-    plugins: [
-      new CacheableResponsePlugin({ statuses: [0, 200] }),
-      new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 3600 }),
-    ],
-  }),
+    plugins: [new CacheableResponsePlugin({ statuses: [0, 200] }), new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 3600 })]
+  })
 );
 
-// MapLibre demotiles
+// MapLibre tiles
 registerRoute(
-  ({ url }: Ctx) => url.hostname.includes('demotiles.maplibre.org'),
-  new CacheFirst({
-    cacheName: 'map-tiles',
-    plugins: [new ExpirationPlugin({ maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 7 })],
-  }),
+  ({ url }) => url.hostname.includes('demotiles.maplibre.org'),
+  new CacheFirst({ cacheName: 'map-tiles', plugins: [new ExpirationPlugin({ maxEntries: 400, maxAgeSeconds: 60 * 60 * 24 * 7 })] })
 );
 
-// BG Sync tetikleyici: client kuyruğunu çalıştır
+// Client’lara kuyruğu tetikle sinyali
 async function notifyClients() {
   const all = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
   for (const c of all) c.postMessage({ type: 'FIELDOPS_SYNC' });
 }
 
-self.addEventListener('sync', (e: any) => {
-  if (e.tag === 'fieldops-sync') e.waitUntil(notifyClients());
-});
-self.addEventListener('periodicsync', (e: any) => {
-  if (e.tag === 'fieldops-periodic') e.waitUntil(notifyClients());
-});
+self.addEventListener('sync', (e: any) => { if (e.tag === 'fieldops-sync') e.waitUntil(notifyClients()); });
+self.addEventListener('periodicsync', (e: any) => { if (e.tag === 'fieldops-periodic') e.waitUntil(notifyClients()); });

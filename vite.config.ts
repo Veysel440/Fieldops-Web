@@ -29,5 +29,6 @@ export default defineConfig({
   ],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) }
-  }
+  },
+  build: { target: 'es2020' }
 });

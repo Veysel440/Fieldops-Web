@@ -1,1 +1,15 @@
+# Tüm metin dosyaları LF
 * text=auto eol=lf
+
+# Windows betikleri CRLF kalsın
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary dosyalar
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

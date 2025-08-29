@@ -1,4 +1,17 @@
 import { http } from './http';
+import { WorkOrder as WorkOrderSchema } from '@/schemas';
+import type { z } from 'zod';
+
+export async function getWorkOrder(id: number) {
+  const { data } = await http.get(`/work-orders/${id}`);
+  return WorkOrderSchema.parse(data);
+}
+
+export async function patchWorkOrder(body: Partial<WorkOrder> & { id: number }) {
+  const { data } = await http.patch(`/work-orders/${body.id}`, body, { conditional: true });
+  return WorkOrderSchema.parse(data);
+}
+
 
 export type WorkOrder = {
   id: number; code: string; status: 'open'|'in_progress'|'done';

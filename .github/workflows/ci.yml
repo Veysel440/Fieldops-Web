@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: true
+          cache: true
+
+      - name: Cache Vite transform cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.vite
+          key: vite-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'vite.config.ts') }}
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+  build-and-lhci:
+    runs-on: ubuntu-latest
+    needs: test-and-lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: true
+          cache: true
+
+      - name: Cache Vite transform cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules/.vite
+          key: vite-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'vite.config.ts') }}
+
+      - name: Build
+        run: pnpm build
+
+      - name: Preview (background)
+        run: pnpm preview &
+
+      - name: Wait for server
+        run: npx wait-on http://localhost:4173
+
+      - name: Lighthouse CI
+        run: pnpm lhci:autorun
